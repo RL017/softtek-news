@@ -25,9 +25,215 @@ const SUGGESTED_KEYWORDS = ['AI', '中标', '战略合作', '股市', '发布', 
 
 function isWithinDays(dateStr: string, days: number): boolean {
   const newsDate = new Date(dateStr);
-  const now = new Date('2026-05-27');
+  const now = new Date();
   const diff = (now.getTime() - newsDate.getTime()) / (1000 * 60 * 60 * 24);
   return diff <= days;
+}
+
+// ---- 关键词提取 ----
+const KEYWORD_DICT = [
+  'AI', 'DeepSeek', '大模型', '智能体', '鸿蒙', '昇腾', '欧拉', '鲲鹏',
+  '中标', '合同', '融资', '投资', '战略合作', '签署', '发布', '峰会',
+  '华为', '中国移动', '中国电信', '中国银行', '央企', '信创',
+  '数字经济', '数字化', '金融科技', '智慧城市', '算力',
+  '睿动AI', '软通数智', 'ESG', '等保', '股票', '大宗交易', '融资融券',
+];
+
+function extractKeywords(news: NewsItem): string[] {
+  const text = news.title + ' ' + news.summary + ' ' + news.content;
+  return KEYWORD_DICT.filter((kw) => text.includes(kw)).slice(0, 8);
+}
+
+// ---- 市场影响评级 ----
+const POSITIVE_SIGNALS = ['中标', '合同', '战略合作', '融资', '投资', '发布', '认证', '荣获', '增长', '提升', '签约', '入选'];
+const NEGATIVE_SIGNALS = ['跌', '减持', '折价', '下滑', '风险', '亏损'];
+
+function getMarketSentiment(news: NewsItem): { label: string; color: string; bg: string; desc: string } {
+  const text = news.title + news.summary + news.content;
+  if (news.category === 'stock') {
+    const isNeg = NEGATIVE_SIGNALS.some((s) => text.includes(s));
+    if (isNeg) return { label: '偏空', color: 'text-red-600', bg: 'bg-red-50 border-red-100', desc: '短期股价承压，关注技术面支撑位' };
+    return { label: '中性', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-100', desc: '正常市场波动，建议持续观察' };
+  }
+  if (news.category === 'finance') {
+    const isPos = text.includes('增长') || text.includes('提升') || text.includes('盈利');
+    if (isPos) return { label: '利好', color: 'text-green-600', bg: 'bg-green-50 border-green-100', desc: '财务表现改善，有望提振市场信心' };
+    return { label: '中性', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-100', desc: '财务信息披露，关注后续资金安排' };
+  }
+  const posCount = POSITIVE_SIGNALS.filter((s) => text.includes(s)).length;
+  if (posCount >= 2) return { label: '利好', color: 'text-green-600', bg: 'bg-green-50 border-green-100', desc: '业务拓展积极，有望强化市场认知' };
+  if (posCount === 1) return { label: '偏正面', color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100', desc: '短期催化剂，关注后续落地情况' };
+  return { label: '中性', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-100', desc: '信息披露常规，暂无明确方向性影响' };
+}
+
+// ---- CATEGORY_META（弹窗复用）----
+const MODAL_CATEGORY_META: Record<string, { label: string; badge: string; text: string; bar: string }> = {
+  bid:         { label: '中标/合同', bar: 'bg-green-500',  badge: 'bg-green-100',  text: 'text-green-700' },
+  product:     { label: '产品发布', bar: 'bg-purple-500', badge: 'bg-purple-100', text: 'text-purple-700' },
+  cooperation: { label: '战略合作', bar: 'bg-blue-500',   badge: 'bg-blue-100',   text: 'text-blue-700' },
+  investment:  { label: '投资融资', bar: 'bg-yellow-500', badge: 'bg-yellow-100', text: 'text-yellow-700' },
+  event:       { label: '活动峰会', bar: 'bg-orange-500', badge: 'bg-orange-100', text: 'text-orange-700' },
+  stock:       { label: '股市行情', bar: 'bg-red-500',    badge: 'bg-red-100',    text: 'text-red-700' },
+  finance:     { label: '财务相关', bar: 'bg-gray-400',   badge: 'bg-gray-100',   text: 'text-gray-600' },
+  brand:       { label: '品牌动态', bar: 'bg-indigo-500', badge: 'bg-indigo-100', text: 'text-indigo-700' },
+};
+
+// ---- 详情弹窗组件 ----
+interface DetailModalProps {
+  news: NewsItem;
+  allNews: NewsItem[];
+  categories: { value: string; label: string }[];
+  closing: boolean;
+  onClose: () => void;
+  onSelect: (n: NewsItem) => void;
+}
+
+function DetailModal({ news, allNews, categories, closing, onClose, onSelect }: DetailModalProps) {
+  const [copied, setCopied] = useState(false);
+  const meta = MODAL_CATEGORY_META[news.category] || { label: news.category, bar: 'bg-gray-400', badge: 'bg-gray-100', text: 'text-gray-600' };
+  const keywords = extractKeywords(news);
+  const sentiment = getMarketSentiment(news);
+  const related = allNews
+    .filter((n) => n.id !== news.id && n.category === news.category)
+    .slice(0, 3);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(news.title + '\n\n' + news.summary + '\n\n' + news.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div
+      className={`fixed inset-0 bg-black flex items-center justify-center z-50 p-4 transition-opacity duration-200 ${closing ? 'bg-opacity-0' : 'bg-opacity-50'}`}
+      onClick={onClose}
+    >
+      <div
+        className={`bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transition-all duration-200 ${closing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`h-1.5 w-full rounded-t-2xl ${meta.bar}`} />
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className={`${meta.badge} ${meta.text} px-2.5 py-0.5 rounded-full text-xs font-semibold`}>
+                {meta.label}
+              </span>
+              <span className="text-xs text-gray-400">{news.source}</span>
+              <span className="text-xs text-gray-300">·</span>
+              <span className="text-xs text-gray-400">{news.date}</span>
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 leading-snug">{news.title}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-300 hover:text-gray-500 flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* 摘要 */}
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <p className="text-xs text-blue-600 font-semibold mb-1.5 uppercase tracking-wide">摘要</p>
+            <p className="text-blue-900 text-sm leading-relaxed">{news.summary}</p>
+          </div>
+
+          {/* 正文 */}
+          <div>
+            <p className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">正文</p>
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{news.content}</p>
+          </div>
+
+          {/* 关键词标签 */}
+          {keywords.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-400 font-semibold mb-2 uppercase tracking-wide">关键词</p>
+              <div className="flex flex-wrap gap-2">
+                {keywords.map((kw) => (
+                  <span key={kw} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs rounded-full hover:bg-blue-50 hover:text-blue-600 transition-colors cursor-default">
+                    # {kw}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 市场影响评级 */}
+          <div className={`rounded-xl p-4 border ${sentiment.bg}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">市场影响评级</p>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sentiment.color} bg-white border`}>
+                {sentiment.label}
+              </span>
+            </div>
+            <p className={`text-xs ${sentiment.color} leading-relaxed`}>{sentiment.desc}</p>
+            <p className="text-xs text-gray-400 mt-1.5">* 仅供参考，不构成投资建议</p>
+          </div>
+
+          {/* 相关新闻 */}
+          {related.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-400 font-semibold mb-3 uppercase tracking-wide">
+                同类新闻推荐 · {categories.find(c => c.value === news.category)?.label}
+              </p>
+              <div className="space-y-2">
+                {related.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => onSelect(r)}
+                    className="w-full text-left p-3 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-all group"
+                  >
+                    <p className="text-sm font-medium text-gray-800 group-hover:text-blue-700 line-clamp-2 leading-snug">{r.title}</p>
+                    <p className="text-xs text-gray-400 mt-1">{r.source} · {r.date}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 底部操作 */}
+          <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+            <a
+              href={news.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline"
+            >
+              查看原文
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+            <button
+              onClick={handleCopy}
+              className={`inline-flex items-center gap-1.5 text-sm transition-colors ${copied ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              {copied ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  已复制
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  复制全文
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Home() {
@@ -251,76 +457,14 @@ export default function Home() {
 
       {/* Detail Modal */}
       {selectedNews && (
-        <div
-          className={`fixed inset-0 bg-black flex items-center justify-center z-50 p-4 transition-opacity duration-200 ${modalClosing ? 'bg-opacity-0' : 'bg-opacity-50'}`}
-          onClick={closeModal}
-        >
-          <div
-            className={`bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl transition-all duration-200 ${modalClosing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    selectedNews.category === 'bid' ? 'bg-green-100 text-green-700' :
-                    selectedNews.category === 'product' ? 'bg-purple-100 text-purple-700' :
-                    selectedNews.category === 'cooperation' ? 'bg-blue-100 text-blue-700' :
-                    selectedNews.category === 'investment' ? 'bg-yellow-100 text-yellow-700' :
-                    selectedNews.category === 'event' ? 'bg-orange-100 text-orange-700' :
-                    selectedNews.category === 'stock' ? 'bg-red-100 text-red-700' :
-                    selectedNews.category === 'finance' ? 'bg-gray-100 text-gray-700' :
-                    'bg-indigo-100 text-indigo-700'
-                  }`}>
-                    {CATEGORIES.find(c => c.value === selectedNews.category)?.label || selectedNews.category}
-                  </span>
-                  <span className="text-xs text-gray-400">{selectedNews.source}</span>
-                  <span className="text-xs text-gray-400">{selectedNews.date}</span>
-                </div>
-                <h2 className="text-lg font-bold text-gray-900 leading-snug">{selectedNews.title}</h2>
-              </div>
-              <button
-                onClick={closeModal}
-                className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-6 py-5">
-              <div className="bg-blue-50 rounded-xl p-4 mb-4 border border-blue-100">
-                <p className="text-xs text-blue-600 font-semibold mb-1 uppercase tracking-wide">摘要</p>
-                <p className="text-blue-900 text-sm leading-relaxed">{selectedNews.summary}</p>
-              </div>
-              <div className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">
-                {selectedNews.content}
-              </div>
-              <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <a
-                  href={selectedNews.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline"
-                >
-                  查看原文
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-                <button
-                  onClick={() => navigator.clipboard.writeText(selectedNews.title + '\n\n' + selectedNews.content)}
-                  className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  复制全文
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DetailModal
+          news={selectedNews}
+          allNews={allNews}
+          categories={CATEGORIES}
+          closing={modalClosing}
+          onClose={closeModal}
+          onSelect={(n) => { closeModal(); setTimeout(() => setSelectedNews(n), 210); }}
+        />
       )}
 
       {/* Back to top */}
