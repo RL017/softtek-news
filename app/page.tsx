@@ -244,7 +244,7 @@ export default function Home() {
     sortOrder: 'newest',
   });
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
-  const [showStats, setShowStats] = useState(true);
+  const [showStats, setShowStats] = useState(false);
   const [page, setPage] = useState(1);
   const [modalClosing, setModalClosing] = useState(false);
 
@@ -282,21 +282,21 @@ export default function Home() {
   }, [filters, allNews]);
 
   const stats = useMemo(() => {
-    const total = allNews.length;
-    const last7d = allNews.filter((n) => isWithinDays(n.date, 7)).length;
-    const last30d = allNews.filter((n) => isWithinDays(n.date, 30)).length;
+    const total = filteredNews.length;
+    const last7d = filteredNews.filter((n) => isWithinDays(n.date, 7)).length;
+    const last30d = filteredNews.filter((n) => isWithinDays(n.date, 30)).length;
     const categoryCount: Record<string, number> = {};
-    allNews.forEach((n) => {
+    filteredNews.forEach((n) => {
       categoryCount[n.category] = (categoryCount[n.category] || 0) + 1;
     });
     const topSource = Object.entries(
-      allNews.reduce((acc, n) => {
+      filteredNews.reduce((acc, n) => {
         acc[n.source] = (acc[n.source] || 0) + 1;
         return acc;
       }, {} as Record<string, number>)
     ).sort((a, b) => b[1] - a[1]);
     return { total, last7d, last30d, categoryCount, topSource };
-  }, [allNews]);
+  }, [filteredNews]);
 
   const pagedNews = filteredNews.slice(0, page * PAGE_SIZE);
   const hasMore = pagedNews.length < filteredNews.length;
@@ -357,7 +357,10 @@ export default function Home() {
               近30天 <strong className="text-white">{stats.last30d}</strong> 篇
             </span>
             <span className="bg-white bg-opacity-10 px-3 py-1 rounded-full text-xs">
-              共收录 <strong className="text-white">{stats.total}</strong> 篇
+              {filters.category === 'all' && filters.keyword === '' && filters.dateRange === 'all'
+                ? <>共收录 <strong className="text-white">{allNews.length}</strong> 篇</>
+                : <>筛选结果 <strong className="text-white">{stats.total}</strong> 篇</>
+              }
             </span>
           </div>
         </div>
@@ -371,9 +374,9 @@ export default function Home() {
             className="mb-3 text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 font-medium"
           >
             <span>{showStats ? '▲' : '▼'}</span>
-            {showStats ? '收起统计面板' : '展开统计面板'}
+            {showStats ? '收起统计面板' : `展开统计面板（当前筛选 ${filteredNews.length} 条）`}
           </button>
-          {showStats && <StatsPanel news={allNews} stats={stats} categories={CATEGORIES} />}
+          {showStats && <StatsPanel news={filteredNews} stats={stats} categories={CATEGORIES} />}
         </div>
 
         {/* Filter Bar */}

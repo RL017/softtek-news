@@ -59,27 +59,32 @@ export default function StatsPanel({ news, stats, categories }: Props) {
         </h3>
 
         {/* Bar chart */}
-        <div className="flex items-end gap-1.5 h-28 overflow-x-auto pb-1 pr-1">
-          {dailyTrend.map(({ date, count }, idx) => (
-            <div key={date} className="flex flex-col items-center gap-1 flex-shrink-0" style={{ minWidth: '24px' }}>
-              {/* Count label on top */}
-              <span className="text-xs text-gray-500 font-medium leading-none">{count}</span>
-              {/* Bar */}
-              <div
-                className="w-4 rounded-t-sm bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500 transition-colors cursor-default"
-                style={{ height: `${Math.max(6, (count / maxCount) * 72)}px` }}
-                title={`${date}: ${count}篇`}
-              />
-              {/* Date label - only show every N steps */}
-              {idx % step === 0 ? (
-                <span className="text-gray-400" style={{ fontSize: '9px' }}>
-                  {date.slice(5)}
-                </span>
-              ) : (
-                <span style={{ height: '12px' }} />
-              )}
-            </div>
-          ))}
+        <div className="overflow-x-auto pr-1">
+          {/* 数字行 + 柱子行 */}
+          <div className="flex items-end gap-1.5" style={{ minHeight: '88px' }}>
+            {dailyTrend.map(({ date, count }) => (
+              <div key={date} className="flex flex-col items-center gap-1 flex-shrink-0" style={{ minWidth: '24px' }}>
+                <span className="text-xs text-gray-500 font-medium leading-none">{count}</span>
+                <div
+                  className="w-4 rounded-t-sm bg-gradient-to-t from-blue-600 to-blue-400 hover:from-blue-700 hover:to-blue-500 transition-colors cursor-default"
+                  style={{ height: `${Math.max(6, (count / maxCount) * 64)}px` }}
+                  title={`${date}: ${count}篇`}
+                />
+              </div>
+            ))}
+          </div>
+          {/* 日期标签行（独立一行，不影响柱子对齐） */}
+          <div className="flex gap-1.5 mt-1">
+            {dailyTrend.map(({ date }, idx) => (
+              <div key={date} className="flex-shrink-0 text-center" style={{ minWidth: '24px' }}>
+                {idx % step === 0 ? (
+                  <span className="text-gray-400 leading-none" style={{ fontSize: '9px' }}>
+                    {date.slice(5)}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Category distribution */}
