@@ -32,12 +32,24 @@ export default function Home() {
     keyword: '',
     category: 'all',
     dateRange: 'all',
+    sortOrder: 'newest',
   });
 
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [showStats, setShowStats] = useState(true);
+
+  const allNews = newsData as NewsItem[];
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allNews.forEach((n) => {
+      counts[n.category] = (counts[n.category] || 0) + 1;
+    });
+    return counts;
+  }, [allNews]);
 
   const filteredNews = useMemo(() => {
-    return (newsData as NewsItem[]).filter((news) => {
+    const result = allNews.filter((news) => {
       const matchKeyword =
         filters.keyword === '' ||
         news.title.includes(filters.keyword) ||
@@ -51,26 +63,32 @@ export default function Home() {
         (filters.dateRange === '30d' && isWithinDays(news.date, 30));
       return matchKeyword && matchCategory && withinDate;
     });
-  }, [filters]);
+
+    result.sort((a, b) => {
+      const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      return filters.sortOrder === 'newest' ? -diff : diff;
+    });
+
+    return result;
+  }, [filters, allNews]);
 
   const stats = useMemo(() => {
-    const total = (newsData as NewsItem[]).length;
-    const last7d = (newsData as NewsItem[]).filter((n) => isWithinDays(n.date, 7)).length;
-    const last30d = (newsData as NewsItem[]).filter((n) => isWithinDays(n.date, 30)).length;
+    const total = allNews.length;
+    const last7d = allNews.filter((n) => isWithinDays(n.date, 7)).length;
+    const last30d = allNews.filter((n) => isWithinDays(n.date, 30)).length;
     const categoryCount: Record<string, number> = {};
-    (newsData as NewsItem[]).forEach((n) => {
+    allNews.forEach((n) => {
       categoryCount[n.category] = (categoryCount[n.category] || 0) + 1;
     });
     const topSource = Object.entries(
-      (newsData as NewsItem[]).reduce((acc, n) => {
+      allNews.reduce((acc, n) => {
         acc[n.source] = (acc[n.source] || 0) + 1;
         return acc;
       }, {} as Record<string, number>)
     )
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
+      .sort((a, b) => b[1] - a[1]);
     return { total, last7d, last30d, categoryCount, topSource };
-  }, []);
+  }, [allNews]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -82,11 +100,11 @@ export default function Home() {
               <span className="text-2xl font-bold text-blue-700">软</span>
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">软通动力新闻智能整理器</h1>
+              <h1 className="text-3xl font-bold tracking-tight">软通新闻智能整理器</h1>
               <p className="text-blue-200 text-sm mt-1">实时追踪软通动力最新动态 · 智能分类 · 全文检索</p>
             </div>
           </div>
-          <div className="mt-4 flex gap-4 text-sm text-blue-100">
+          <div className="mt-4 flex gap-4 text-sm text-blue-100 flex-wrap">
             <span className="bg-blue-600 bg-opacity-40 px-3 py-1 rounded-full">
               近7天 <strong className="text-white">{stats.last7d}</strong> 篇
             </span>
@@ -101,30 +119,48 @@ export default function Home() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Stats Panel */}
-        <StatsPanel stats={stats} categories={CATEGORIES} />
+        {/* Stats Panel Toggle */}
+        <div>
+          <button
+            onClick={() => setShowStats((v) => !v)}
+            className="mb-3 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
+          >
+            {showStats ? '▲ 收起统计面板' : '▼ 展开统计面板'}
+          </button>
+          {showStats && <StatsPanel news={allNews} stats={stats} categories={CATEGORIES} />}
+        </div>
 
-        {/* Search & Filter */}
+        {/* Search */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex flex-col md:flex-row gap-4">
-            <SearchBar
-              value={filters.keyword}
-              onChange={(keyword) => setFilters((f) => ({ ...f, keyword }))}
-            />
-            <FilterBar
-              categories={CATEGORIES}
-              value={filters.category}
-              dateRange={filters.dateRange}
-              onCategoryChange={(category) => setFilters((f) => ({ ...f, category }))}
-              onDateRangeChange={(dateRange) => setFilters((f) => ({ ...f, dateRange: dateRange as FilterOptions['dateRange'] }))}
-            />
-          </div>
+          <SearchBar
+            value={filters.keyword}
+            onChange={(keyword) => setFilters((f) => ({ ...f, keyword }))}
+          />
+        </div>
+
+        {/* Filter Bar */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <FilterBar
+            categories={CATEGORIES}
+            value={filters.category}
+            dateRange={filters.dateRange}
+            sortOrder={filters.sortOrder}
+            categoryCounts={categoryCounts}
+            onCategoryChange={(category) => setFilters((f) => ({ ...f, category }))}
+            onDateRangeChange={(dateRange) => setFilters((f) => ({ ...f, dateRange: dateRange as FilterOptions['dateRange'] }))}
+            onSortOrderChange={(sortOrder) => setFilters((f) => ({ ...f, sortOrder: sortOrder as FilterOptions['sortOrder'] }))}
+          />
         </div>
 
         {/* Results Info */}
         <div className="flex items-center justify-between">
           <p className="text-gray-500 text-sm">
             共找到 <strong className="text-blue-700">{filteredNews.length}</strong> 条相关新闻
+            {filters.keyword && (
+              <span className="ml-1">
+                · 关键词 <span className="text-blue-700 font-medium">「{filters.keyword}」</span>
+              </span>
+            )}
           </p>
           {filters.keyword && (
             <button
@@ -149,6 +185,7 @@ export default function Home() {
               <NewsCard
                 key={news.id}
                 news={news}
+                keyword={filters.keyword}
                 onClick={() => setSelectedNews(news)}
                 isActive={selectedNews?.id === news.id}
               />
@@ -169,7 +206,7 @@ export default function Home() {
           >
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     selectedNews.category === 'bid' ? 'bg-green-100 text-green-700' :
                     selectedNews.category === 'product' ? 'bg-purple-100 text-purple-700' :
@@ -213,7 +250,7 @@ export default function Home() {
                 </a>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(selectedNews.title + '\n' + selectedNews.content);
+                    navigator.clipboard.writeText(selectedNews.title + '\n\n' + selectedNews.content);
                   }}
                   className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
                 >
@@ -224,6 +261,15 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Back to top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="fixed bottom-6 right-6 w-10 h-10 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-40"
+        title="回到顶部"
+      >
+        ↑
+      </button>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 mt-12 py-6 text-center text-gray-400 text-sm">

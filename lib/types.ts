@@ -13,4 +13,5 @@ export interface FilterOptions {
   keyword: string;
   category: string;
   dateRange: 'all' | '7d' | '30d';
+  sortOrder: 'newest' | 'oldest';
 }

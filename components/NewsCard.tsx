@@ -2,6 +2,7 @@ import type { NewsItem } from '../lib/types';
 
 interface Props {
   news: NewsItem;
+  keyword: string;
   onClick: () => void;
   isActive: boolean;
 }
@@ -34,7 +35,25 @@ function getCategoryLabel(category: string): string {
   return labels[category] || category;
 }
 
-export default function NewsCard({ news, onClick, isActive }: Props) {
+function Highlight({ text, keyword }: { text: string; keyword: string }) {
+  if (!keyword.trim()) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <mark key={i} className="bg-yellow-200 text-yellow-900 rounded px-0.5">
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}
+
+export default function NewsCard({ news, keyword, onClick, isActive }: Props) {
   const colors = getCategoryColor(news.category);
 
   return (
@@ -57,11 +76,13 @@ export default function NewsCard({ news, onClick, isActive }: Props) {
 
         {/* Title */}
         <h3 className="font-bold text-gray-900 leading-snug mb-2 line-clamp-2 hover:text-blue-700 transition-colors">
-          {news.title}
+          <Highlight text={news.title} keyword={keyword} />
         </h3>
 
         {/* Summary */}
-        <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{news.summary}</p>
+        <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">
+          <Highlight text={news.summary} keyword={keyword} />
+        </p>
       </div>
 
       {/* Footer */}
